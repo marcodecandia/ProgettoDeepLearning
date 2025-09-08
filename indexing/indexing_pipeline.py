@@ -14,10 +14,26 @@ np.save("clip_embeddings.npy", embedding_array)
 
 metadata = [{"path": item["path"], "label": item["label"]} for item in data_list]
 
-with open("metadata.pkl", "wb") as f:
-    pickle.dump(metadata, f)
+embedding_database = []
 
-with open("metadata.pkl", "rb") as f:
-    metadata = pickle.load(f)
+for i, item in enumerate(data_list):
+    entry = {
+        "index": i,
+        "path": item["path"],
+        "label": item["label"],
+        "clip_embedding": embedding_array[i]
+    }
+    embedding_database.append(entry)
+
+
+with open("embedding_database.pkl", "wb") as f:
+    pickle.dump(embedding_database, f)
+
+with open("embedding_database.pkl", "rb") as f:
+    embedding_database = pickle.load(f)
+
+print(embedding_database[0]["index"])
+print(embedding_database[0]["label"])
+print(embedding_database[0]["clip_embedding"].shape)
 
 

@@ -6,6 +6,8 @@ import torch.cuda
 from PIL import Image
 from segment_anything import sam_model_registry, SamPredictor, SamAutomaticMaskGenerator
 
+from indexing.clip_embedding import ClipEmbedding
+
 
 def mask_to_box(mask, pad=4):
     ys, xs = np.where(mask > 0)
@@ -133,3 +135,13 @@ class SAMMasks:
         crop_rgba.paste(crop_rgb, (0, 0), mask=crop_mask)
 
         return crop_rgba
+
+    def create_clip_embedding(self, mask):
+        clip = ClipEmbedding(mask)
+        mask_embedding = clip.create_embeddings()
+
+        return mask_embedding
+
+
+
+
