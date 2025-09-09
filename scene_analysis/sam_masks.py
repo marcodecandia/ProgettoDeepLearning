@@ -22,13 +22,13 @@ def mask_to_box(mask, pad=4):
 
 class SAMMasks:
     def __init__(self,
-                 model_type: str = "vit_h",
-                 checkpoint: str = "sam_vit_h_4b8939.pth",
+                 model_type: str = "vit_b",
+                 checkpoint: str = "models/sam_vit_b_01ec64.pth",
                  device: Optional[str] = None
                  ):
         self.model_type = model_type
         self.checkpoint = checkpoint
-        self.device = device
+        self.device = torch.device("cpu") #forzato
 
     def load_sam(self):
         if self.device is None:
@@ -54,12 +54,12 @@ class SAMMasks:
 
         if mode == "auto":
             defaults = dict(
-                points_per_side=32,
-                pred_iou_threshold=0.86,
-                stability_score_threshold=0.92,
+                points_per_side=8,
+                pred_iou_thresh=0.75,
+                stability_score_thresh=0.92,
                 crop_n_layers=1,
-                crop_n_points_downscale_factor=2,
-                min_mask_region_area=256
+                crop_n_points_downscale_factor=4,
+                min_mask_region_area=512
             )
 
             if params:
@@ -127,9 +127,12 @@ class SAMMasks:
         if x1 <= x0 or y1 <= y0:
             return None
 
-        rgb = image.convert("RGB")
-        crop_rgb = rgb.crop((x0, y0, x1, y1))
-        crop_mask = Image.fromarray((mask[y0:y1, x0:x1] * 255).asytpe(np.uint8), mode="L")
+        crop_rgb = image.convert("RGB")
+        mask_crop = mask[y0:y1, x0:x1] * 255
+        #crop_rgb = rgb.crop((x0, y0, x1, y1))
+        crop_mask = Image.fromarray(mask_crop.astype(np.uint8), mode="L")
+
+        crop_mask = crop_mask.resize(crop_rgb.size, resample=Image.NEAREST)
 
         crop_rgba = Image.new("RGBA", crop_rgb.size, (0, 0, 0, 0))
         crop_rgba.paste(crop_rgb, (0, 0), mask=crop_mask)
@@ -137,10 +140,11 @@ class SAMMasks:
         return crop_rgba
 
     def create_clip_embedding(self, mask):
-        clip = ClipEmbedding(mask)
-        mask_embedding = clip.create_embeddings()
 
-        return mask_embedding
+        clip = ClipEmbedding([{"image": mask}])
+        mask_embedding_array = clip.create_embeddings(batch_size=1)
+
+        return mask_embedding_array[0]
 
 
 

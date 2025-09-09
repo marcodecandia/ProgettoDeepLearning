@@ -10,9 +10,14 @@ class SearchLogic:
     def similarity(self):
         similarities = []
 
+        mask_emb = np.array(self.mask_embedding).reshape(1, -1)
+        print(mask_emb.shape)
+
         for idx, entry in enumerate(self.embedding_db):
             db_emb = np.array(entry["clip_embedding"]).reshape(1, -1)
-            cos_sim = cosine_similarity(self.mask_embedding, db_emb)[0][0]
+            print(db_emb.shape)
+
+            cos_sim = cosine_similarity(mask_emb, db_emb)[0][0]
             similarities.append((idx, entry["label"], cos_sim))
 
         return similarities
