@@ -72,4 +72,7 @@ for i, mask_dict in enumerate(image_masks):
     search_engine = SearchLogic(mask_embedding, embedding_database)
 
     mask_similarities = search_engine.similarity()
+    character_similarities = search_engine.character_similarity(mask_similarities)
+
     print(f"Top predictions: {search_engine.top_predictions(mask_similarities, 10)}")
+    print(f"Top character predictions (%): {search_engine.top_predictions(character_similarities, 10)}")

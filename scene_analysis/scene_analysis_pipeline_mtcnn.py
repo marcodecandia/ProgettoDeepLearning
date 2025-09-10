@@ -5,11 +5,17 @@ import torch
 import numpy as np
 from facenet_pytorch import MTCNN
 from indexing.clip_embedding import ClipEmbedding
+from scene_analysis.search_logic import SearchLogic
 import matplotlib
+
+from scene_analysis.mtcnn_masks import FaceMasks
+from scene_analysis.search_logic import SearchLogic
+
 matplotlib.use("TkAgg")
 
+
 # --- Config ---
-image_root = 'C:/Users/utente/PycharmProjects/ProgettoDeepLearning/data/train/Gara/3596_jpg.rf.058ac899789bb1e6d9a3b1b7a3a5b4d3.jpg'
+image_root = 'C:/Users/utente/PycharmProjects/ProgettoDeepLearning/data/test/Naruto/43596_jpg.rf.e68f4774e18d30d2e7b663288b7bfae9.jpg'
 embedding_db_path = "../indexing/embedding_database.pkl"
 
 # --- Carica immagine ---
@@ -26,38 +32,29 @@ with open(embedding_db_path, "rb") as f:
 
 # --- Inizializza MTCNN ---
 device = "cuda" if torch.cuda.is_available() else "cpu"
-mtcnn = MTCNN(keep_all=True, device=device)
+mask_maker = FaceMasks(device=device)
 
 # --- Rileva volti ---
-boxes, probs = mtcnn.detect(image_pil)
-faces = []
-if boxes is not None:
-    for i, box in enumerate(boxes):
-        x0, y0, x1, y1 = [int(b) for b in box]
-        face_crop = image_pil.crop((x0, y0, x1, y1))
-        faces.append(face_crop)
-
-        # Visualizza il volto
+faces = mask_maker.detect_faces(image_pil)
+if faces is not None:
+    for i, face in enumerate(faces):
         plt.figure(figsize=(4, 4))
-        plt.imshow(face_crop)
+        plt.imshow(face["image"])
         plt.axis("off")
-        plt.title(f"Volto {i+1}")
+        plt.title(f"Volto {i + 1}")
         plt.show()
+
 
 # --- Crea embedding CLIP per ogni volto e confronta ---
 for i, face in enumerate(faces):
-    clip = ClipEmbedding([{"image": face}])
-    face_embedding = clip.create_embeddings(batch_size=1)[0]
+    clip_embedding = mask_maker.create_clip_embedding(face["image"])
 
-    # Confronta con il database
-    similarities = []
-    for entry in embedding_database:
-        db_emb = np.array(entry["clip_embedding"]).reshape(1, -1)
-        # assicurati che face_embedding abbia la stessa shape (1, 512)
-        face_emb = face_embedding.reshape(1, -1)
-        cos_sim = np.dot(face_emb, db_emb.T)[0][0]
-        similarities.append((entry["label"], cos_sim))
+    search_logic = SearchLogic(clip_embedding, embedding_database)
 
-    # Ordina e prendi i top 5
-    top_preds = sorted(similarities, key=lambda x: x[1], reverse=True)[:5]
+    similarities = search_logic.similarity()
+
+    top_preds = search_logic.top_predictions(similarities, 10)
+    character_preds = search_logic.character_similarity(similarities)
     print(f"Volto {i+1} - Top predictions: {top_preds}")
+    print(f"Top character predictions (%): {character_preds}")
+
