@@ -42,61 +42,20 @@ class NarutoDataset(Dataset):
         return image, class_name
 
 
-train_transforms = A.Compose([
-    A.RandomResizedCrop((224, 224), scale=(0.8, 1.0)),
-    A.HorizontalFlip(p=0.5),
-    A.RandomBrightnessContrast(p=0.2),
-    A.ColorJitter(p=0.2),
-    A.GaussianBlur(p=0.1),
-    A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
-    ToTensorV2()
-])
-
 val_transforms = A.Compose([
     A.Resize(224, 224),
     A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
     ToTensorV2()
 ])
 
-train_dataset = NarutoDataset("../data/train", transform=train_transforms)
-train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
-
 val_dataset = NarutoDataset("../data/valid", transform=val_transforms)
+
 val_loader = DataLoader(val_dataset, batch_size=8, shuffle=False)
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
 processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-
-
-def train_epoch(model, loader, optimizer, processor, device):
-    model.train()
-    total_loss = 0.0
-
-    for images, texts in tqdm(loader, desc="Training"):
-        images_denorm = ((images + 1) * 127.5).clamp(0, 255).byte()
-        inputs = processor(
-            text=texts,
-            images=images_denorm,
-            return_tensors="pt",
-            padding=True
-        ).to(device)
-
-        optimizer.zero_grad()
-
-        outputs = model(**inputs, return_loss=True)
-
-        loss = outputs.loss
-        loss.backward()
-
-        optimizer.step()
-
-        total_loss += loss.item()
-
-    average_loss = total_loss / len(loader)
-
-    return average_loss
 
 
 def valid_epoch(model, loader, processor, device):
@@ -123,22 +82,10 @@ def valid_epoch(model, loader, processor, device):
         return average_loss
 
 
-
-
-optimizer = AdamW(clip_model.parameters(), lr=5e-6)
-
 num_epochs = 5
 
 for epoch in range(num_epochs):
     print(f"Epoch {epoch+1}/{num_epochs}")
-
-    train_loss = train_epoch(
-        model=clip_model,
-        loader=train_loader,
-        optimizer=optimizer,
-        processor=processor,
-        device=device
-    )
 
     val_loss = valid_epoch(
         model=clip_model,
@@ -147,8 +94,6 @@ for epoch in range(num_epochs):
         device=device
     )
 
-    print(f"Training loss: {train_loss:.4f}")
     print(f"Validation loss: {val_loss:.4f}")
-
 
 
