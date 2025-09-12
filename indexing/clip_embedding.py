@@ -12,9 +12,10 @@ class ClipEmbedding:
         self.model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(self.device)
         self.processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
-    def create_embeddings(self, batch_size=8):
+    def create_embeddings(self, batch_size=8, trained_model=True):
 
-        print(f"")
+        if trained_model:
+            self.model.load_state_dict(torch.load("../models/trained_clip_model.pth", map_location="cpu"))
 
         if isinstance(self.data, Image.Image):
             images = [self.data]

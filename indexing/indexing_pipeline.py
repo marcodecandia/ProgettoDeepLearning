@@ -10,7 +10,7 @@ data_list = image_loader.loader()
 embedding_creator = ClipEmbedding(data_list)
 embedding_array = embedding_creator.create_embeddings(batch_size=8)
 
-np.save("clip_embeddings.npy", embedding_array)
+np.save("../embeddings/clip_embeddings.npy", embedding_array)
 
 metadata = [{"path": item["path"], "label": item["label"]} for item in data_list]
 
@@ -26,10 +26,10 @@ for i, item in enumerate(data_list):
     embedding_database.append(entry)
 
 
-with open("embedding_database.pkl", "wb") as f:
+with open("../embeddings/embedding_database_trained.pkl", "wb") as f:
     pickle.dump(embedding_database, f)
 
-with open("embedding_database.pkl", "rb") as f:
+with open("../embeddings/embedding_database_trained.pkl", "rb") as f:
     embedding_database = pickle.load(f)
 
 print(embedding_database[0]["index"])

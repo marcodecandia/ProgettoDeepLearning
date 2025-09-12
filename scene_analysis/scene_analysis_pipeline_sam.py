@@ -51,7 +51,7 @@ plt.show()
 image_masks = mask_maker.generate_masks(predictor, image_pil, points=None, point_labels=None, bbox=None, params=None,
                                         mode="auto")
 
-with open("../indexing/embedding_database.pkl", "rb") as f:
+with open("../embeddings/embedding_database.pkl", "rb") as f:
     embedding_database = pickle.load(f)
 
 print(f"Numero maschere trovate: {len(image_masks)}")

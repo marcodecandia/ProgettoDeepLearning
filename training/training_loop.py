@@ -1,13 +1,14 @@
 import os
 import cv2
+import numpy as np
 import torch
 from torch.optim import AdamW
 from torch.utils.data import Dataset, DataLoader
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 from transformers import CLIPModel, CLIPProcessor
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
-import torch.nn.functional as F
 
 
 class NarutoDataset(Dataset):
@@ -103,52 +104,72 @@ def valid_epoch(model, loader, processor, device):
     model.eval()
     total_loss = 0.0
 
-    for images, texts in tqdm(loader, desc="Training"):
-        images_denorm = ((images + 1) * 127.5).clamp(0, 255).byte()
-        inputs = processor(
-            text=texts,
-            images=images_denorm,
-            return_tensors="pt",
-            padding=True
-        ).to(device)
+    with torch.no_grad():
+        for images, texts in tqdm(loader, desc="Validation"):
+            images_denorm = ((images + 1) * 127.5).clamp(0, 255).byte()
+            inputs = processor(
+                text=texts,
+                images=images_denorm,
+                return_tensors="pt",
+                padding=True
+            ).to(device)
 
-        with torch.no_grad():
             outputs = model(**inputs, return_loss=True)
 
             loss = outputs.loss
             total_loss += loss.item()
 
-        average_loss = total_loss / len(loader)
+            average_loss = total_loss / len(loader)
 
         return average_loss
 
 
+def training_loop(model, train_loader, val_loader, processor, device, num_epochs, patience=3):
+    optimizer = AdamW(model.parameters(), lr=1e-5, weight_decay=1e-4)
+    scheduler = ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=2)
+
+    best_val_loss = np.inf
+    patience_counter = 0
+
+    for epoch in range(num_epochs):
+        print(f"\nEpoch {epoch+1} / {num_epochs}")
+
+        train_loss = train_epoch(
+            model=clip_model,
+            loader=train_loader,
+            optimizer=optimizer,
+            processor=processor,
+            device=device
+        )
+
+        val_loss = valid_epoch(
+            model=clip_model,
+            loader=val_loader,
+            processor=processor,
+            device=device
+        )
+
+        print(f"Train loss: {train_loss:.4f} | Val loss: {val_loss:.4f}")
+
+        scheduler.step(val_loss)
+
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            patience_counter = 0
+            torch.save(model.state_dict(), "../models/trained_clip_model.pth")
+            print("Model saved")
+        else:
+            patience_counter += 1
+            print(f"No improvement. Patience {patience_counter} / {patience}")
+            if patience_counter > patience:
+                print("Early stopping")
+                break
 
 
-optimizer = AdamW(clip_model.parameters(), lr=5e-6)
-
-num_epochs = 5
-
-for epoch in range(num_epochs):
-    print(f"Epoch {epoch+1}/{num_epochs}")
-
-    train_loss = train_epoch(
-        model=clip_model,
-        loader=train_loader,
-        optimizer=optimizer,
-        processor=processor,
-        device=device
-    )
-
-    val_loss = valid_epoch(
-        model=clip_model,
-        loader=val_loader,
-        processor=processor,
-        device=device
-    )
-
-    print(f"Training loss: {train_loss:.4f}")
-    print(f"Validation loss: {val_loss:.4f}")
-
-
-
+training_loop(model=clip_model,
+              train_loader=train_loader,
+              val_loader=val_loader,
+              processor=processor,
+              device=device,
+              num_epochs=10,
+              patience=3)
