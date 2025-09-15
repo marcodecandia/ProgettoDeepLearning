@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import torch
 from torch.optim import AdamW
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 from transformers import CLIPModel, CLIPProcessor
@@ -59,8 +59,23 @@ val_transforms = A.Compose([
     ToTensorV2()
 ])
 
+
+
 train_dataset = NarutoDataset("../data/train", transform=train_transforms)
-train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
+
+class_counts = torch.bincount(torch.tensor(train_dataset.labels))
+class_weights = 1.0 / class_counts.float()
+
+sample_weights = [class_weights[label] for label in train_dataset.labels]
+sample_weights = torch.tensor(sample_weights)
+
+sampler = WeightedRandomSampler(
+    weights=sample_weights,
+    num_samples=len(sample_weights),
+    replacement=True
+)
+
+train_loader = DataLoader(train_dataset, batch_size=8, sampler=sampler)
 
 val_dataset = NarutoDataset("../data/valid", transform=val_transforms)
 val_loader = DataLoader(val_dataset, batch_size=8, shuffle=False)

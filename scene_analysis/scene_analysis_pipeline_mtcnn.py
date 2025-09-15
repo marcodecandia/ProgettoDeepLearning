@@ -158,3 +158,4 @@ for i, face in enumerate(faces):
     print(f"Top character predictions (%): {character_preds}")
 
 """
+#   MODIFICARE PARAMETRI DI DATA AUGMENTATION
