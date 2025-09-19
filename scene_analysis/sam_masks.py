@@ -23,7 +23,7 @@ def mask_to_box(mask, pad=4):
 class SAMMasks:
     def __init__(self,
                  model_type: str = "vit_b",
-                 checkpoint: str = "models/sam_vit_b_01ec64.pth",
+                 checkpoint: str = "../models/sam_vit_b_01ec64.pth",
                  device: Optional[str] = None
                  ):
         self.model_type = model_type
@@ -38,6 +38,8 @@ class SAMMasks:
         sam = sam_model_registry[self.model_type](checkpoint=self.checkpoint)
         sam.to(self.device)
         predictor = SamPredictor(sam)
+
+        print("Using SAM")
 
         return predictor
 

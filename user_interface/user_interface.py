@@ -7,7 +7,11 @@ from PIL import Image
 
 from indexing.clip_embedding import ClipEmbedding
 from scene_analysis.mtcnn_masks import FaceMasks
+from scene_analysis.sam_masks import SAMMasks
 from scene_analysis.search_logic import SearchLogic
+
+with open("../embeddings/embedding_database.pkl", "rb") as f:
+    embedding_database_base = pickle.load(f)
 
 with open("../embeddings/embedding_database_trained.pkl", "rb") as f:
     embedding_database = pickle.load(f)
@@ -16,18 +20,21 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 mask_maker = FaceMasks(device=device)
 
 
-def query_database(image=None, text=None, top_k=5):
+def query_database(image=None, text=None, top_k=5, clip_version="fine-tuned"):
+    embedding_db = embedding_database if clip_version == "fine-tuned" else embedding_database_base
+
     if image is not None:
-        clip_embedding = mask_maker.create_clip_embedding(image)
+        clip = ClipEmbedding(data=image)
+        clip_embedding = clip.create_embeddings(trained_model=(clip_version == "fine-tuned"))
     elif text is not None and text.strip() != "":
         clip = ClipEmbedding(data=text, mode="text")
-        clip_embedding = clip.create_embeddings()
+        clip_embedding = clip.create_embeddings(trained_model=(clip_version == "fine-tuned"))
 
     else:
         return "Load an image or write a description.", None
 
     search_logic = SearchLogic(mask_embedding=clip_embedding,
-                               embedding_db=embedding_database)
+                               embedding_db=embedding_db)
 
     similarities = search_logic.similarity()
     top_preds = search_logic.top_predictions(similarities, top_k)
@@ -42,20 +49,47 @@ def query_database(image=None, text=None, top_k=5):
     return results
 
 
-def analyze_scene(image):
-    faces = mask_maker.detect_faces(image)
+def analyze_scene(image, method="MTCNN", clip_version="fine-tuned"):
 
-    if faces is None:
+    embedding_db = embedding_database if clip_version == "fine-tuned" else embedding_database_base
+    segments = []
+    if method == "MTCNN":
+        mask_maker = FaceMasks(device=device)
+        faces = mask_maker.detect_faces(image)
+        if faces:
+            for f in faces:
+                if isinstance(f, dict) and "image" in f:
+                    segments.append(f)
+                else:
+                    segments.append({"image": f})
+    elif method == "SAM":
+        sam_maker = SAMMasks(device=device)
+        predictor = sam_maker.load_sam()
+        masks = sam_maker.generate_masks(predictor, image, points=None, bbox=None, params=None, point_labels=None, mode="auto")
+
+        for m in masks[:5]:
+            seg_img = sam_maker.isolate_segment_rgba(image, m["segmentation"])
+            if seg_img:
+                segments.append({"image": seg_img})
+
+    if not segments:
         return "No face detected", None
 
     outputs = []
-    for i, face in enumerate(faces):
-        clip_embedding = mask_maker.create_clip_embedding(face["image"])
+    for i, seg in enumerate(segments):
+        img = seg.get("image", None)
+        if img is None:
+            continue
+
+        clip_embedding = ClipEmbedding(img).create_embeddings()
         search_logic = SearchLogic(mask_embedding=clip_embedding,
-                                   embedding_db=embedding_database)
+                                   embedding_db=embedding_db)
         similarities = search_logic.similarity()
         top_pred = search_logic.top_predictions(similarities, 1)[0]
-        outputs.append((face["image"], f"Prediction: {top_pred[1]} ({top_pred[2]:.2f}"))
+        outputs.append((img, f"Prediction: {top_pred[1]} ({top_pred[2]:.2f}"))
+
+    if not outputs:
+        return "No valid segments found"
 
     return outputs
 
@@ -68,24 +102,28 @@ with gr.Blocks(title="Naruto Retrieval & Scene Analysis") as demo:
             image_input = gr.Image(type="pil", label="Load image:", interactive=True)
             text_input = gr.Text(label="Or write a textual description")
 
+        clip_selector = gr.Dropdown(choices=["base", "fine-tuned"], value="fine-tuned")
         top_k = gr.Slider(1, 10, value=5, step=1, label="Top K results")
         query_btn = gr.Button("Find in the Database")
         output_gallery = gr.Gallery(label="Results")
 
         query_btn.click(
             fn=query_database,
-            inputs=[image_input, text_input, top_k],
+            inputs=[image_input, text_input, top_k, clip_selector],
             outputs=[output_gallery]
         )
 
     with gr.Tab("Scene Analysis"):
         scene_input = gr.Image(type="pil", label="Load scene", interactive=True)
+        clip_selector = gr.Dropdown(choices=["base", "fine-tuned"], value="fine-tuned")
+        analyzer_selector = gr.Dropdown(choices=["MTCNN", "SAM"], value="MTCNN")
+
         analyze_btn = gr.Button("Analyze scene")
         scene_output = gr.Gallery(label="Faces and Predictions")
 
         analyze_btn.click(
             fn=analyze_scene,
-            inputs=[scene_input],
+            inputs=[scene_input, analyzer_selector, clip_selector],
             outputs=[scene_output]
         )
 

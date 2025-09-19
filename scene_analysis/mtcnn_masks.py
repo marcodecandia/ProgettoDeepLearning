@@ -34,6 +34,7 @@ class FaceMasks:
         """
         Genera embedding CLIP per un volto (PIL Image).
         """
+        print("Using MTCNN")
         clip = ClipEmbedding([{"image": face}])
         embeddings = clip.create_embeddings(batch_size=1)
         return embeddings[0]
