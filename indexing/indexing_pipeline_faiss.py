@@ -17,9 +17,17 @@ embedding_array = embedding_array.astype(np.float32)
 embedding_dim = embedding_array.shape[1]
 
 index = faiss.IndexFlatL2(embedding_dim)
-index.add(embedding_array)
 
-metadata = [{"path": item["path"], "label": item["label"]} for item in data_list]
+metadata = []
+
+for i, item in enumerate(data_list):
+    embedding = embedding_array[i].reshape(1, -1)
+    index.add(embedding)
+
+    metadata.append({
+        "path": item["path"],
+        "label": item["label"]
+    })
 
 faiss.write_index(index, "../embeddings/embedding_database_trained_faiss.faiss")
 

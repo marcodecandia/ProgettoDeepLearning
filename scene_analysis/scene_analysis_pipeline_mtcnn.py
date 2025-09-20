@@ -2,6 +2,7 @@ import os
 import pickle
 
 import cv2
+import faiss
 from PIL import Image
 import matplotlib.pyplot as plt
 import torch
@@ -59,6 +60,10 @@ test_loader = DataLoader(test_data)
 with open(embedding_db_path, "rb") as f:
     embedding_database = pickle.load(f)
 
+faiss_index = faiss.read_index("../embeddings/embedding_database_trained_faiss.faiss")
+with open("../embeddings/clip_embeddings_metadata.pkl", "rb") as f:
+    metadata = pickle.load(f)
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
 mask_maker = FaceMasks(device=device)
 
@@ -93,8 +98,8 @@ for image, text in tqdm(test_loader):
     for i, face in enumerate(faces):
         clip_embedding = mask_maker.create_clip_embedding(face["image"])
 
-        search_logic = SearchLogic(clip_embedding, embedding_database)
-        similarities = search_logic.similarity()
+        search_logic = SearchLogic(mask_embedding=clip_embedding, faiss_index=faiss_index, metadata=metadata)
+        similarities = search_logic.similarity_faiss(10, "cosine")
 
         top_pred = search_logic.top_predictions(similarities, 1)
         character_pred = top_pred[0][1]

@@ -10,9 +10,11 @@ def softmax(x):
 
 
 class SearchLogic:
-    def __init__(self, mask_embedding, embedding_db):
+    def __init__(self, mask_embedding, embedding_db=None, faiss_index=None, metadata=None):
         self.mask_embedding = mask_embedding
         self.embedding_db = embedding_db
+        self.faiss_index = faiss_index
+        self.metadata = metadata
 
     def similarity(self):
         similarities = []
@@ -26,6 +28,30 @@ class SearchLogic:
             similarities.append((idx, entry["label"], cos_sim))
 
         return similarities
+
+
+    def similarity_faiss(self, top_k=10, metric="cosine"):
+        mask_emb = np.array(self.mask_embedding).astype(np.float32).reshape(1, -1)
+
+        if metric == "cosine":
+            mask_emb = mask_emb / np.linalg.norm(mask_emb, axis=1, keepdims=True)
+
+        distances, indices = self.faiss_index.search(mask_emb, top_k)
+
+        results = []
+        for i, dist in zip(indices[0], distances[0]):
+            if i == -1:
+                continue
+
+            label = self.metadata[i]["label"]
+            #path = self.metadata[i]["path"]
+
+            score = 1 - dist if metric == "cosine" else - dist
+
+            results.append((i, label, score))
+
+        return results
+
 
     def character_similarity(self, similarities, mode="mean"):
         character_similarities = defaultdict(list)
