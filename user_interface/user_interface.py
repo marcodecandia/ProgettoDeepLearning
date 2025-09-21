@@ -67,16 +67,16 @@ def query_database(image=None, text=None, top_k=5, clip_version="fine-tuned", db
 
 
 def analyze_scene(image, method="MTCNN", clip_version="fine-tuned", interactive=False, bbox=None):
-
     embedding_db = embedding_database if clip_version == "fine-tuned" else embedding_database_base
     segments = []
 
+    # ----------------- modalità interattiva -----------------
     if interactive and bbox is not None:
         x, y, w, h = bbox["x"], bbox["y"], bbox["width"], bbox["height"]
         x1, y1 = x + w, y + h
+        roi = image.crop((x, y, x1, y1))
 
         if method == "MTCNN":
-            roi = image.crop((x, y, x1, y1))
             mask_maker = FaceMasks(device=device)
             faces = mask_maker.detect_faces(roi)
             if faces:
@@ -85,23 +85,25 @@ def analyze_scene(image, method="MTCNN", clip_version="fine-tuned", interactive=
                         segments.append(f)
                     else:
                         segments.append({"image": f})
+
         elif method == "SAM":
             sam_maker = SAMMasks(device=device)
             predictor = sam_maker.load_sam()
-            masks = sam_maker.generate_masks(predictor=predictor,
-                                             image=image,
-                                             points=None,
-                                             bbox=[x, y, x1, y1],
-                                             params=None,
-                                             point_labels=None,
-                                             mode="auto")
-
+            masks = sam_maker.generate_masks(
+                predictor=predictor,
+                image=image,
+                bbox=[x, y, x1, y1],
+                points=None,
+                params=None,
+                point_labels=None,
+                mode="auto"
+            )
             for m in masks[:5]:
                 seg_img = sam_maker.isolate_segment_rgba(image, m["segmentation"])
                 if seg_img:
                     segments.append({"image": seg_img})
 
-
+    # ----------------- modalità standard -----------------
     else:
         if method == "MTCNN":
             mask_maker = FaceMasks(device=device)
@@ -112,27 +114,31 @@ def analyze_scene(image, method="MTCNN", clip_version="fine-tuned", interactive=
                         segments.append(f)
                     else:
                         segments.append({"image": f})
+
         elif method == "SAM":
             sam_maker = SAMMasks(device=device)
             predictor = sam_maker.load_sam()
-            masks = sam_maker.generate_masks(predictor=predictor,
-                                             image=image,
-                                             points=None,
-                                             bbox=None,
-                                             params=None,
-                                             point_labels=None,
-                                             mode="auto")
-
+            masks = sam_maker.generate_masks(
+                predictor=predictor,
+                image=image,
+                bbox=None,
+                points=None,
+                params=None,
+                point_labels=None,
+                mode="auto"
+            )
             for m in masks[:5]:
                 seg_img = sam_maker.isolate_segment_rgba(image, m["segmentation"])
                 if seg_img:
                     segments.append({"image": seg_img})
 
+    # ----------------- nessun segmento rilevato -----------------
     if not segments:
         return "No face/object detected", None
 
+    # ----------------- calcolo embeddings e predizioni -----------------
     outputs = []
-    for i, seg in enumerate(segments):
+    for seg in segments:
         img = seg.get("image", None)
         if img is None:
             continue
@@ -142,12 +148,13 @@ def analyze_scene(image, method="MTCNN", clip_version="fine-tuned", interactive=
                                    embedding_db=embedding_db)
         similarities = search_logic.similarity()
         top_pred = search_logic.top_predictions(similarities, 1)[0]
-        outputs.append((img, f"Prediction: {top_pred[1]} ({top_pred[2]:.2f}"))
+        outputs.append((img, f"Prediction: {top_pred[1]} ({top_pred[2]:.2f})"))
 
     if not outputs:
         return "No valid segments found"
 
     return outputs
+
 
 
 with gr.Blocks(title="Naruto Retrieval & Scene Analysis") as demo:
@@ -171,23 +178,48 @@ with gr.Blocks(title="Naruto Retrieval & Scene Analysis") as demo:
         )
 
     with gr.Tab("Scene Analysis"):
-        scene_input = gr.Image(type="pil", label="Load scene", interactive=True, tool="select")
+        with gr.Row():
+            interactive_mode = gr.Checkbox(label="Enable interactive bounding box mode", value=False)
+
+        with gr.Row():
+            # Caricamento standard
+            scene_input = gr.Image(type="pil", label="Load scene", visible=True)
+
+            # Editor interattivo (inizialmente nascosto)
+            scene_editor = gr.ImageEditor(type="pil", label="Select object", visible=False)
+
+        # Quando spunti la checkbox, nasconde l'immagine normale e mostra l’editor
+        interactive_mode.change(
+            lambda checked: (
+                gr.update(visible=not checked),  # scene_input
+                gr.update(visible=checked)  # scene_editor
+            ),
+            inputs=interactive_mode,
+            outputs=[scene_input, scene_editor]
+        )
 
         clip_selector = gr.Dropdown(choices=["base", "fine-tuned"], value="fine-tuned", label="CLIP version")
         analyzer_selector = gr.Dropdown(choices=["MTCNN", "SAM"], value="MTCNN", label="Scene analyzer")
 
         analyze_btn = gr.Button("Analyze scene")
-        scene_status = gr.Textbox(label="Status")
         scene_output = gr.Gallery(label="Faces and Predictions")
 
-        interactive = gr.Checkbox(label="Enable interactive bounding box mode", value=False)
+
+        # Risolve l'input corretto da passare a analyze_scene
+        def resolve_inputs(image, editor, interactive, method, clip):
+            if interactive:
+                # estrai l'immagine dal dizionario restituito da ImageEditor
+                pil_image = editor.get("image") if isinstance(editor, dict) else editor
+                return analyze_scene(pil_image, method, clip, interactive=True)
+            else:
+                return analyze_scene(image, method, clip, interactive=False)
+
 
         analyze_btn.click(
-            fn=analyze_scene,
-            inputs=[scene_input, analyzer_selector, clip_selector, interactive],
-            outputs=[scene_status, scene_output]
+            fn=resolve_inputs,
+            inputs=[scene_input, scene_editor, interactive_mode, analyzer_selector, clip_selector],
+            outputs=scene_output
         )
-
 
 demo.queue()
 
