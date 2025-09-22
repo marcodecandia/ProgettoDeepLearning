@@ -2,7 +2,7 @@ import numpy as np
 import torch.cuda
 from PIL import Image
 from tqdm import tqdm
-from transformers import Blip2Processor, Blip2ForConditionalGeneration
+from transformers import Blip2Processor, Blip2Model
 
 
 class Blip2Embedding:
@@ -11,10 +11,10 @@ class Blip2Embedding:
         self.mode = mode
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        self.processor = Blip2Processor.from_pretrained("Salesforce/blip2-flan-t5-xl")
-        self.model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-flan-t5-xl").to(self.device)
+        self.processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
+        self.model = Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b").to(self.device)
 
-    def create_embeddings(self, batch_size=8):
+    def create_embeddings(self, batch_size=4):
         if self.mode == "image":
             if isinstance(self.data, Image.Image):
                 images = [self.data]
@@ -34,8 +34,11 @@ class Blip2Embedding:
                 ).to(self.device)
 
                 with torch.no_grad():
-                    embeddings = self.model.get_image_features(**inputs)
+                    outputs = self.model(**inputs)
+                    embeddings = outputs.last_hidden_state.mean(dim=1)
                     embeddings /= embeddings.norm(p=2, dim=-1, keepdim=True)
+                    #embeddings = self.model.get_image_features(**inputs)
+                    #embeddings /= embeddings.norm(p=2, dim=-1, keepdim=True)
 
                 embeddings = embeddings.cpu().numpy()
 
@@ -48,35 +51,40 @@ class Blip2Embedding:
 
             return np.array(all_embeddings) if not single_image else all_embeddings[0]
 
+
         elif self.mode == "text":
+
             if isinstance(self.data, str):
+
                 texts = [self.data]
+
                 single_text = True
+
             else:
+
                 texts = self.data
+
                 single_text = False
 
             all_embeddings = []
 
             for i in tqdm(range(0, len(texts), batch_size), desc="Creating Blip-2 text embeddings"):
-                batch = texts[i:i+batch_size]
+                batch = texts[i:i + batch_size]
 
-                inputs = self.processor(
-                    text=batch,
-                    return_tensors="pt",
-                    padding=True,
-                    truncation=True
-                ).to(self.device)
+                inputs = self.processor(text=batch, return_tensors="pt", padding=True, truncation=True).to(self.device)
 
                 with torch.no_grad():
-                    embeddings = self.model.get_text_features(**inputs)
+                    outputs = self.model(**inputs)
+
+                    embeddings = outputs.last_hidden_state.mean(dim=1)
+
                     embeddings /= embeddings.norm(p=2, dim=-1, keepdim=True)
 
                 embeddings = embeddings.cpu().numpy()
 
                 all_embeddings.extend(embeddings)
 
-            return np.array(all_embeddings) if not single_text else all_embeddings
+            return np.array(all_embeddings) if not single_text else all_embeddings[0]
 
         else:
-            raise ValueError(f"Invalid mode: {self.mode}. Use 'image' or 'text'")
+            raise ValueError(f"Invalid mode: {self.mode}. Use 'image' only")

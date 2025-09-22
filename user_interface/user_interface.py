@@ -6,6 +6,7 @@ import torch.cuda
 from PIL import Image
 
 from indexing.clip_embedding import ClipEmbedding
+from indexing.dino_embedding import DinoEmbeddding
 from scene_analysis.mtcnn_masks import FaceMasks
 from scene_analysis.sam_masks import SAMMasks
 from scene_analysis.search_logic import SearchLogic
@@ -16,6 +17,9 @@ with open("../embeddings/embedding_database.pkl", "rb") as f:
 with open("../embeddings/embedding_database_trained.pkl", "rb") as f:
     embedding_database = pickle.load(f)
 
+with open("../embeddings/embedding_database_dino.pkl", "rb") as f:
+    embedding_database_dino = pickle.load(f)
+
 faiss_index = faiss.read_index("../embeddings/embedding_database_trained_faiss.faiss")
 with open("../embeddings/clip_embeddings_metadata.pkl", "rb") as f:
     faiss_metadata = pickle.load(f)
@@ -24,27 +28,36 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 mask_maker = FaceMasks(device=device)
 
 
-def query_database(image=None, text=None, top_k=5, clip_version="fine-tuned", db_type="faiss"):
-    embedding_db = embedding_database if clip_version == "fine-tuned" else embedding_database_base
+def query_database(image=None, text=None, top_k=5, model_name="CLIP fine-tuned", db_type="faiss"):
+    if model_name.startswith("CLIP"):
+        clip_version = "fine-tuned" if model_name == "CLIP fine-tuned" else "base"
+        embedding_db = embedding_database if clip_version == "fine-tuned" else embedding_database_base
 
-    if image is not None:
-        clip = ClipEmbedding(data=image)
-        clip_embedding = clip.create_embeddings(trained_model=(clip_version == "fine-tuned"))
-    elif text is not None and text.strip() != "":
-        clip = ClipEmbedding(data=text, mode="text")
-        clip_embedding = clip.create_embeddings(trained_model=(clip_version == "fine-tuned"))
+        if image is not None:
+            clip = ClipEmbedding(data=image)
+            embedding = clip.create_embeddings(trained_model=(clip_version == "fine-tuned"))
+        elif text is not None and text.strip() != "":
+            clip = ClipEmbedding(data=text, mode="text")
+            embedding = clip.create_embeddings(trained_model=(clip_version == "fine-tuned"))
 
-    else:
-        return "Load an image or write a description.", None
+        else:
+            return "Load an image or write a description.", None
 
-    search_logic = SearchLogic(mask_embedding=clip_embedding,
+    elif model_name == "DINOv2":
+        if image is None:
+            return "DINOv2 only supports image search", None
+        embedding_db = embedding_database_dino
+        dino = DinoEmbeddding(image)
+        embedding = dino.create_embeddings()
+
+    search_logic = SearchLogic(mask_embedding=embedding,
                                embedding_db=embedding_db,
-                               faiss_index=faiss_index,
-                               metadata=faiss_metadata)
+                               faiss_index=faiss_index if model_name.startswith("CLIP") else None,
+                               metadata=faiss_metadata if model_name.startswith("CLIP") else None)
 
     results = []
 
-    if db_type == "faiss":
+    if db_type == "faiss" and model_name.startswith("CLIP"):
         similarities = search_logic.similarity_faiss(top_k=top_k,
                                                      metric="cosine")
         for i, label, score in similarities:
@@ -165,15 +178,34 @@ with gr.Blocks(title="Naruto Retrieval & Scene Analysis") as demo:
             image_input = gr.Image(type="pil", label="Load image:", interactive=True)
             text_input = gr.Text(label="Or write a textual description")
 
-        clip_selector = gr.Dropdown(choices=["base", "fine-tuned"], value="fine-tuned", label="CLIP version")
-        search_method = gr.Dropdown(choices=["faiss", "naive"], value="faiss", label="Search method")
+        model_selector = gr.Dropdown(choices=["CLIP base", "CLIP fine-tuned", "DINOv2"],
+                                     value="CLIP fine-tuned",
+                                     label="Select embedding model")
+        search_method = gr.Dropdown(choices=["faiss", "naive"],
+                                    value="faiss",
+                                    label="Search method")
         top_k = gr.Slider(1, 10, value=5, step=1, label="Top K results")
         query_btn = gr.Button("Find in the Database")
         output_gallery = gr.Gallery(label="Results")
 
+
+        def remove_text_input(model_name):
+            if model_name == "DINOv2":
+                return gr.update(visible=False,
+                                 placeholder="Text search disabled")
+            else:
+                return gr.update(visible=True,
+                                 placeholder="Or write a textual description")
+
+        model_selector.change(
+            fn=remove_text_input,
+            inputs=[model_selector],
+            outputs=[text_input]
+        )
+
         query_btn.click(
             fn=query_database,
-            inputs=[image_input, text_input, top_k, clip_selector, search_method],
+            inputs=[image_input, text_input, top_k, model_selector, search_method],
             outputs=[output_gallery]
         )
 
