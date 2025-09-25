@@ -10,27 +10,40 @@ def softmax(x):
 
 
 class SearchLogic:
-    def __init__(self, mask_embedding, embedding_db=None, faiss_index=None, metadata=None):
+    def __init__(self, mask_embedding, embedding_db=None, faiss_index=None, metadata=None, embedding_type="clip"):
         self.mask_embedding = mask_embedding
         self.embedding_db = embedding_db
         self.faiss_index = faiss_index
         self.metadata = metadata
+        self.embedding_type = embedding_type
+
+        self.embedding_key = "clip_embedding" if self.embedding_type == "clip" else "dino_embedding"
 
     def similarity(self):
+        if self.embedding_db is None:
+            raise ValueError("embedding_db non fornito")
+
         similarities = []
 
         mask_emb = np.array(self.mask_embedding).reshape(1, -1)
 
+        emb_type = "clip_embedding" if self.embedding_type == "clip" else "dino_embedding"
         for idx, entry in enumerate(self.embedding_db):
-            db_emb = np.array(entry["clip_embedding"]).reshape(1, -1)
+            if self.embedding_key not in entry:
+                continue
+
+            db_emb = np.array(entry[emb_type]).reshape(1, -1)
 
             cos_sim = cosine_similarity(mask_emb, db_emb)[0][0]
-            similarities.append((idx, entry["label"], cos_sim))
+            similarities.append((idx, entry.get("label", "Unknown"), cos_sim))
 
         return similarities
 
 
     def similarity_faiss(self, top_k=10, metric="cosine"):
+        if self.faiss_index is None or self.metadata is None:
+            raise ValueError("faiss_index o metadata non forniti")
+
         mask_emb = np.array(self.mask_embedding).astype(np.float32).reshape(1, -1)
 
         if metric == "cosine":

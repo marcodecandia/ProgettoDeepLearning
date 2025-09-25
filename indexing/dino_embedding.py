@@ -30,7 +30,7 @@ class DinoEmbeddding:
 
         for i in tqdm(range(0, len(images), batch_size), desc="Creating DINO embeddings"):
             batch_images = images[i:i + batch_size]
-            batch_tensors = torch.stack([self.transform(img) for img in batch_images]).to(self.device)
+            batch_tensors = torch.stack([self.transform(img) for img in batch_images if img is not None]).to(self.device)
 
             with torch.no_grad():
                 embeddings = self.model.forward_features(batch_tensors)
