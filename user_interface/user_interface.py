@@ -6,10 +6,10 @@ from PIL import Image
 import json
 
 from indexing.clip_embedding import ClipEmbedding
-from indexing.dino_embedding import DinoEmbeddding
+from indexing.dino_embedding import DinoEmbedding
 from scene_analysis.mtcnn_masks import FaceMasks
 from scene_analysis.sam_masks import SAMMasks
-from scene_analysis.search_logic import SearchLogic
+from indexing.search_logic import SearchLogic
 
 # ----------------- Caricamento database -----------------
 with open("../embeddings/embedding_database.pkl", "rb") as f:
@@ -46,7 +46,7 @@ def query_database(image=None, text=None, top_k=5, model_name="CLIP fine-tuned",
         if image is None:
             return "DINOv2 only supports image search", None
         embedding_db = embedding_database_dino
-        dino = DinoEmbeddding(image)
+        dino = DinoEmbedding(image)
         embedding = dino.create_embeddings()
 
         embedding_type = "dino"

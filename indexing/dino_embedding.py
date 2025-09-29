@@ -6,7 +6,7 @@ from torchvision import transforms
 from tqdm import tqdm
 
 
-class DinoEmbeddding:
+class DinoEmbedding:
     def __init__(self, data):
         self.data = data
         self.device = "cuda" if torch.cuda.is_available() else "cpu"

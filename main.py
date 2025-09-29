@@ -6,7 +6,7 @@ from PIL import Image
 from matplotlib import pyplot as plt
 import matplotlib
 
-from scene_analysis.search_logic import SearchLogic
+from indexing.search_logic import SearchLogic
 
 matplotlib.use("TkAgg")
 

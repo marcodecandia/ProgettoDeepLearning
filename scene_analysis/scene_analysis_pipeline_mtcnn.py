@@ -4,19 +4,14 @@ import pickle
 import cv2
 import faiss
 from PIL import Image
-import matplotlib.pyplot as plt
 import torch
-import numpy as np
-from facenet_pytorch import MTCNN
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 
-from indexing.clip_embedding import ClipEmbedding
-from scene_analysis.search_logic import SearchLogic
 import matplotlib
 
 from scene_analysis.mtcnn_masks import FaceMasks
-from scene_analysis.search_logic import SearchLogic
+from indexing.search_logic import SearchLogic
 
 matplotlib.use("TkAgg")
 

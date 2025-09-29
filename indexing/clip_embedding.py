@@ -6,16 +6,17 @@ from tqdm import tqdm
 
 
 class ClipEmbedding:
-    def __init__(self, data, mode="image"):
+    def __init__(self, data, mode="image", trained_model=True):
         self.data = data
         self.mode = mode
+        self.trained_model = trained_model
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(self.device)
         self.processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
-    def create_embeddings(self, batch_size=8, trained_model=True):
+    def create_embeddings(self, batch_size=8):
 
-        if trained_model:
+        if self.trained_model:
             self.model.load_state_dict(torch.load("C:/Users/utente/PycharmProjects/ProgettoDeepLearning/models/trained_clip_model.pth", map_location="cpu"))
 
         if self.mode == "text":

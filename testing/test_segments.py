@@ -1,14 +1,11 @@
-import os
 import pickle
 import faiss
 from PIL import Image
-import matplotlib.pyplot as plt
 import torch
 from tqdm import tqdm
-from sklearn.metrics import confusion_matrix
 
 from scene_analysis.mtcnn_masks import FaceMasks
-from scene_analysis.search_logic import SearchLogic
+from indexing.search_logic import SearchLogic
 from test_utils import load_annotations, iou, evaluate_predictions, plot_gt_vs_pred
 
 import matplotlib

@@ -1,0 +1,7 @@
+program: test_wandb.py
+method: grid
+parameters:
+  model:
+    values: ["clip", "clip_finetuned", "dino"]
+  index_type:
+    values: ["python_list", "faiss"]

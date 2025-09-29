@@ -6,8 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 
 matplotlib.use("TkAgg")
-from search_logic import SearchLogic
-import numpy as np
+from indexing.search_logic import SearchLogic
 
 """
 import requests

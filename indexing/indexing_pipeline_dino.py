@@ -4,7 +4,7 @@ import numpy as np
 import os
 from PIL import Image
 from indexing.image_loader import ImageLoader
-from indexing.dino_embedding import DinoEmbeddding
+from indexing.dino_embedding import DinoEmbedding
 
 # Disabilita symlinks su Windows per HuggingFace
 os.environ["HF_HUB_DISABLE_SYMLINKS"] = "1"
@@ -16,7 +16,7 @@ data_list = image_loader.loader()
 print("A: Loaded images")
 
 # Creazione embeddings DINOv2
-embedding_creator = DinoEmbeddding(data_list)  # scegli modello leggero
+embedding_creator = DinoEmbedding(data_list)  # scegli modello leggero
 print("B: Initialized DINOEmbedding")
 
 embedding_array = embedding_creator.create_embeddings(batch_size=8)
