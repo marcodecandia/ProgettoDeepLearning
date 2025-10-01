@@ -29,7 +29,7 @@ for i, item in enumerate(data_list):
         "label": item["label"]
     })
 
-faiss.write_index(index, "../embeddings/embedding_database_trained_faiss.faiss")
+faiss.write_index(index, "../embeddings/embedding_database_cliptrained_faiss.faiss")
 
 with open("../embeddings/clip_embeddings_metadata.pkl", "wb") as f:
     pickle.dump(metadata, f)

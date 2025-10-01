@@ -3,7 +3,7 @@ from clip_embedding import ClipEmbedding
 import numpy as np
 import pickle
 
-data_root = '../data/test'
+data_root = '../data/train'
 
 image_loader = ImageLoader(root=data_root)
 data_list = image_loader.loader()
@@ -26,10 +26,10 @@ for i, item in enumerate(data_list):
     embedding_database.append(entry)
 
 
-with open("../embeddings/embedding_database_trained.pkl", "wb") as f:
+with open("../embeddings/embedding_database_cliptrained_list.pkl", "wb") as f:
     pickle.dump(embedding_database, f)
 
-with open("../embeddings/embedding_database_trained.pkl", "rb") as f:
+with open("../embeddings/embedding_database_cliptrained_list.pkl", "rb") as f:
     embedding_database = pickle.load(f)
 
 print(embedding_database[0]["index"])

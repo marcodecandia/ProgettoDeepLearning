@@ -56,7 +56,7 @@ def iou(boxA, boxB):
     return iou_value
 
 
-def evaluate_predictions(annotations, predictions, iou_threshold=0.5):
+def evaluate_predictions(annotations, predictions, labels, iou_threshold=0.5):
     y_true = []
     y_pred = []
 
@@ -93,7 +93,6 @@ def evaluate_predictions(annotations, predictions, iou_threshold=0.5):
             y_true.append(ann["label"])
             y_pred.append("None")
 
-    labels = list({lab for lab in y_true + y_pred if lab != "None"})
     cm = confusion_matrix(y_true, y_pred, labels=labels)
     report = classification_report(y_true, y_pred, labels=labels)
 

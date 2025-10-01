@@ -39,7 +39,7 @@ for i, item in enumerate(data_list):
     }
     embedding_database_dino.append(entry)
 
-with open("../embeddings/embedding_database_dino.pkl", "wb") as f:
+with open("../embeddings/embedding_database_dino_list.pkl", "wb") as f:
     pickle.dump(embedding_database_dino, f)
 
 with open("../embeddings/dino_metadata.pkl", "wb") as f:

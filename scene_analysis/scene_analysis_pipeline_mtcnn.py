@@ -48,14 +48,14 @@ class NarutoDataset(Dataset):
         return image, class_name
 
 
-embedding_db_path = "../embeddings/embedding_database_trained.pkl"
+embedding_db_path = "../embeddings/embedding_database_cliptrained_list.pkl"
 test_data = NarutoDataset("../data/test")
 test_loader = DataLoader(test_data)
 
 with open(embedding_db_path, "rb") as f:
     embedding_database = pickle.load(f)
 
-faiss_index = faiss.read_index("../embeddings/embedding_database_trained_faiss.faiss")
+faiss_index = faiss.read_index("../embeddings/embedding_database_cliptrained_faiss.faiss")
 with open("../embeddings/clip_embeddings_metadata.pkl", "rb") as f:
     metadata = pickle.load(f)
 
@@ -115,7 +115,7 @@ print(f"Test Accuracy: {accuracy * 100:.2f}% ({correct}/{total})")
 """
 # --- Config ---
 image_root = 'C:/Users/utente/PycharmProjects/ProgettoDeepLearning/data/test/Naruto/43596_jpg.rf.e68f4774e18d30d2e7b663288b7bfae9.jpg'
-embedding_db_path = "../embeddings/embedding_database_trained.pkl"
+embedding_db_path = "../embeddings/embedding_database_cliptrained_list.pkl"
 
 # --- Carica immagine ---
 image_pil = Image.open(image_root)

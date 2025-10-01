@@ -1,21 +1,23 @@
-import numpy as np
 import torch
 import timm
+import numpy as np
 from PIL import Image
 from torchvision import transforms
 from tqdm import tqdm
-
 
 class DinoEmbedding:
     def __init__(self, data):
         self.data = data
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+
         self.model = timm.create_model("vit_base_patch14_dinov2", pretrained=True)
-        self.model.eval()
+        self.model.eval().to(self.device)
+
         self.transform = transforms.Compose([
             transforms.Resize((518, 518)),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225])
         ])
 
     def create_embeddings(self, batch_size=8):
@@ -33,8 +35,14 @@ class DinoEmbedding:
             batch_tensors = torch.stack([self.transform(img) for img in batch_images if img is not None]).to(self.device)
 
             with torch.no_grad():
-                embeddings = self.model.forward_features(batch_tensors)
-                embeddings /= embeddings.norm(p=2, dim=-1, keepdim=True)
+                feats = self.model.forward_features(batch_tensors)
+
+                if isinstance(feats, dict):
+                    embeddings = feats["x_norm_clstoken"]      # (B, 768)
+                else:
+                    embeddings = feats[:, 0, :]                # (B, 768)
+
+                embeddings = torch.nn.functional.normalize(embeddings, dim=-1)
 
             embeddings = embeddings.cpu().numpy()
 
