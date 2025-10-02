@@ -2,10 +2,15 @@ import os
 import cv2
 import numpy as np
 import torch
+import matplotlib
+
+matplotlib.use("TkAgg")
+import matplotlib.pyplot as plt
 from torch.optim import AdamW
 from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
+from torchvision import transforms
 from transformers import CLIPModel, CLIPProcessor
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
@@ -59,13 +64,9 @@ val_transforms = A.Compose([
     ToTensorV2()
 ])
 
-
-
 train_dataset = NarutoDataset("../data/train", transform=train_transforms)
-
 class_counts = torch.bincount(torch.tensor(train_dataset.labels))
 class_weights = 1.0 / class_counts.float()
-
 sample_weights = [class_weights[label] for label in train_dataset.labels]
 sample_weights = torch.tensor(sample_weights)
 
@@ -76,14 +77,20 @@ sampler = WeightedRandomSampler(
 )
 
 train_loader = DataLoader(train_dataset, batch_size=8, sampler=sampler)
-
 val_dataset = NarutoDataset("../data/valid", transform=val_transforms)
 val_loader = DataLoader(val_dataset, batch_size=8, shuffle=False)
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(device)
 processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
+# 🔒 Freezing strategy: sblocca solo le projection heads
+for name, param in clip_model.named_parameters():
+    if "visual_projection" in name or "text_projection" in name:
+        param.requires_grad = True
+    else:
+        param.requires_grad = False
 
 
 def train_epoch(model, loader, optimizer, processor, device):
@@ -91,28 +98,25 @@ def train_epoch(model, loader, optimizer, processor, device):
     total_loss = 0.0
 
     for images, texts in tqdm(loader, desc="Training"):
-        images_denorm = ((images + 1) * 127.5).clamp(0, 255).byte()
+        # Converti batch di immagini tensor → PIL per CLIPProcessor
+        pil_images = [transforms.ToPILImage()(img) for img in images]
+
         inputs = processor(
             text=texts,
-            images=images_denorm,
+            images=pil_images,
             return_tensors="pt",
             padding=True
         ).to(device)
 
         optimizer.zero_grad()
-
         outputs = model(**inputs, return_loss=True)
-
         loss = outputs.loss
         loss.backward()
-
         optimizer.step()
 
         total_loss += loss.item()
 
-    average_loss = total_loss / len(loader)
-
-    return average_loss
+    return total_loss / len(loader)
 
 
 def valid_epoch(model, loader, processor, device):
@@ -121,33 +125,35 @@ def valid_epoch(model, loader, processor, device):
 
     with torch.no_grad():
         for images, texts in tqdm(loader, desc="Validation"):
-            images_denorm = ((images + 1) * 127.5).clamp(0, 255).byte()
+            pil_images = [transforms.ToPILImage()(img) for img in images]
+
             inputs = processor(
                 text=texts,
-                images=images_denorm,
+                images=pil_images,
                 return_tensors="pt",
                 padding=True
             ).to(device)
 
             outputs = model(**inputs, return_loss=True)
-
             loss = outputs.loss
             total_loss += loss.item()
 
-            average_loss = total_loss / len(loader)
-
-        return average_loss
+    return total_loss / len(loader)
 
 
 def training_loop(model, train_loader, val_loader, processor, device, num_epochs, patience=3):
-    optimizer = AdamW(model.parameters(), lr=1e-5, weight_decay=1e-4)
+    optimizer = AdamW(model.parameters(), lr=1e-6, weight_decay=1e-4)
     scheduler = ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=2)
 
     best_val_loss = np.inf
     patience_counter = 0
 
+    # Liste per salvare l'andamento delle loss
+    train_losses = []
+    val_losses = []
+
     for epoch in range(num_epochs):
-        print(f"\nEpoch {epoch+1} / {num_epochs}")
+        print(f"\nEpoch {epoch + 1} / {num_epochs}")
 
         train_loss = train_epoch(
             model=clip_model,
@@ -166,6 +172,10 @@ def training_loop(model, train_loader, val_loader, processor, device, num_epochs
 
         print(f"Train loss: {train_loss:.4f} | Val loss: {val_loss:.4f}")
 
+        # Salva i valori per il grafico
+        train_losses.append(train_loss)
+        val_losses.append(val_loss)
+
         scheduler.step(val_loss)
 
         if val_loss < best_val_loss:
@@ -180,11 +190,24 @@ def training_loop(model, train_loader, val_loader, processor, device, num_epochs
                 print("Early stopping")
                 break
 
+    # --- Plot finale ---
+    plt.figure(figsize=(8, 5))
+    plt.plot(range(1, len(train_losses) + 1), train_losses, label="Train Loss", marker="o")
+    plt.plot(range(1, len(val_losses) + 1), val_losses, label="Validation Loss", marker="o")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title("Andamento Train vs Validation Loss")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
 
-training_loop(model=clip_model,
-              train_loader=train_loader,
-              val_loader=val_loader,
-              processor=processor,
-              device=device,
-              num_epochs=10,
-              patience=3)
+
+training_loop(
+    model=clip_model,
+    train_loader=train_loader,
+    val_loader=val_loader,
+    processor=processor,
+    device=device,
+    num_epochs=20,
+    patience=3
+)

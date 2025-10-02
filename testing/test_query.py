@@ -4,7 +4,6 @@ import time
 import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
-from torch.utils.tensorboard import SummaryWriter
 from scipy.special import softmax
 
 from indexing.image_loader import ImageLoader
@@ -18,16 +17,13 @@ INDEX_TYPES = ["python_list", "faiss"]
 TOP_K = 5
 
 data_root = "../data/test"
-db_dir = "../embeddings1"
+db_dir = "../embeddings"
 os.makedirs("./comparisons", exist_ok=True)
 
 # Carica immagini test
 image_loader = ImageLoader(root=data_root)
 data_list = image_loader.loader()
 n_queries = len(data_list)
-
-# TensorBoard
-writer = SummaryWriter(log_dir="./runs")
 
 # Per grafici comparativi
 results_metrics = {metric: {} for metric in ["accuracy_top1", "accuracy_top5", "mrr", "cross_entropy", "query_time"]}
@@ -73,24 +69,35 @@ for model_name in MODELS:
         if model_name == "clip_finetuned":
             searcher.embedding_key = "clip_finetuned_embedding"
 
-        # Flag per stampare predizioni solo per la configurazione desiderata
-        debug_print = (config_name == "clip_finetuned_python_list")
-
         # ---------------------------
         # Metriche
         # ---------------------------
         correct_top1, correct_top5, mrr_list, cross_entropy_list, query_times = 0, 0, [], [], []
 
+        # ---------------------------
         # Loop query
+        # ---------------------------
         for i, item in enumerate(data_list):
             gt_label = item["label"]
             query_path = item["path"]
+            query_img = Image.open(query_path).convert("RGB")
 
-            # Estrai embedding query
-            query_emb = searcher.encode_image(query_path)
+            # ---- Creazione embedding query ----
+            if model_name.startswith("clip"):
+                # CLIP
+                query_emb = searcher.encode_image(query_path)
+            elif model_name.startswith("dino"):
+                # DINOv2
+                from indexing.dino_embedding import DinoEmbedding
+
+                dino_embedder = DinoEmbedding(data=query_img)
+                query_emb = dino_embedder.create_embeddings()
+            else:
+                raise ValueError(f"Unsupported model: {model_name}")
+
             searcher.mask_embedding = query_emb
 
-            # Query DB
+            # ---- Ricerca ----
             start = time.time()
             if index_type == "python_list":
                 similarities = searcher.similarity()
@@ -98,7 +105,10 @@ for model_name in MODELS:
                 scores_all = np.array([sim[2] for sim in similarities])
                 labels_all = [sim[1] for sim in similarities]
             else:
-                top_preds = searcher.similarity_faiss(top_k=TOP_K, metric="cosine")
+                if model_name.startswith("clip"):
+                    top_preds = searcher.similarity_faiss(top_k=TOP_K, metric="cosine")
+                elif model_name.startswith("dino"):
+                    top_preds = searcher.similarity_faiss_dino(top_k=TOP_K)
                 scores_all = np.array([pred[2] for pred in top_preds])
                 labels_all = [pred[1] for pred in top_preds]
             end = time.time()
@@ -107,29 +117,20 @@ for model_name in MODELS:
             if not top_preds:
                 continue
 
-            # Top-1 / Top-5
+            # ---- Metriche ----
             labels_pred = [pred[1] for pred in top_preds]
             correct_top1 += int(gt_label == labels_pred[0])
             correct_top5 += int(gt_label in labels_pred)
 
-            # MRR
-            ranks = [j+1 for j, (_, lbl, _) in enumerate(top_preds) if lbl == gt_label]
-            mrr_list.append(1/ranks[0] if ranks else 0)
+            ranks = [j + 1 for j, (_, lbl, _) in enumerate(top_preds) if lbl == gt_label]
+            mrr_list.append(1 / ranks[0] if ranks else 0)
 
-            # Cross-Entropy
             probs = softmax(scores_all)
             try:
                 true_idx = labels_all.index(gt_label)
                 cross_entropy_list.append(-np.log(probs[true_idx] + 1e-10))
             except ValueError:
                 cross_entropy_list.append(-np.log(1e-10))
-
-            # --- STAMPA SOLO PER LA CONFIGURAZIONE DI DEBUG ---
-            if debug_print:
-                print(f"\nQuery {i}: {query_path} - GT: {gt_label}")
-                for rank, (idx, label, score) in enumerate(top_preds):
-                    img_path = metadata[idx]["path"] if index_type=="faiss" else embedding_db[idx]["path"]
-                    print(f"  Rank {rank+1}: {label} (score: {score:.4f}) - path: {img_path}")
 
         # ---------------------------
         # Metriche finali
@@ -151,8 +152,6 @@ for model_name in MODELS:
         results_metrics["cross_entropy"][config_name] = cross_entropy
         results_metrics["query_time"][config_name] = avg_query_time
 
-writer.close()
-
 # ---------------------------
 # Grafici comparativi
 # ---------------------------
@@ -168,6 +167,6 @@ for metric, values in results_metrics.items():
     plt.savefig(f"./comparisons/{metric}_comparison.png")
     plt.close()
 
-print("Testing completato. Grafici salvati in ./comparisons/. Visualizza i dettagli con TensorBoard se vuoi.")
+print("Testing completato. Grafici salvati in ./comparisons/.")
 
 

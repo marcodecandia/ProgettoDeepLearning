@@ -1,8 +1,8 @@
 
-NarutoFaces - v2 2025-09-25 6:49pm
+NarutoFaces - v3 2025-10-01 4:57pm
 ==============================
 
-This dataset was exported via roboflow.com on September 25, 2025 at 4:49 PM GMT
+This dataset was exported via roboflow.com on October 1, 2025 at 2:58 PM GMT
 
 Roboflow is an end-to-end computer vision platform that helps you
 * collaborate with your team on computer vision projects
@@ -17,7 +17,7 @@ visit https://github.com/roboflow/notebooks
 
 To find over 100k other datasets and pre-trained models, visit https://universe.roboflow.com
 
-The dataset includes 24 images.
+The dataset includes 60 images.
 Objects are annotated in COCO format.
 
 The following pre-processing was applied to each image:

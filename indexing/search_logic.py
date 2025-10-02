@@ -109,6 +109,31 @@ class SearchLogic:
         results.sort(key=lambda x: x[2], reverse=True)
         return results
 
+    def similarity_faiss_dino(self, top_k=10):
+        """
+        Similarità FAISS per embeddings DINO (768-dim).
+        """
+        if self.faiss_index is None or self.metadata is None:
+            raise ValueError("faiss_index o metadata non forniti")
+
+        # Query embedding
+        mask_emb = np.array(self.mask_embedding, dtype=np.float32).reshape(1, -1)
+        mask_emb /= np.linalg.norm(mask_emb, axis=1, keepdims=True)  # normalizza sempre
+
+        # Ricerca top-k in FAISS
+        distances, indices = self.faiss_index.search(mask_emb.astype(np.float32), top_k)
+
+        results = []
+        for i, dist in zip(indices[0], distances[0]):
+            if i == -1:
+                continue
+            label = self.metadata[i]["label"]
+            score = 1 - dist  # per cosine similarity normalizzata
+            results.append((i, label, score))
+
+        results.sort(key=lambda x: x[2], reverse=True)
+        return results
+
     # -----------------------------
     # Top-k predizioni
     # -----------------------------

@@ -1,4 +1,4 @@
-# NarutoFaces > 2025-09-25 6:49pm
+# NarutoFaces > 2025-10-01 4:57pm
 https://universe.roboflow.com/marcodecandia/narutofaces-djgjz
 
 Provided by a Roboflow user

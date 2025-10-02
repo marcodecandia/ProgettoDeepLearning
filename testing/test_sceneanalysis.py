@@ -30,29 +30,29 @@ embedding_db, faiss_index, metadata = None, None, None
 
 if MODEL_NAME == "CLIP fine-tuned":
     if INDEX_TYPE == "naive":
-        with open("../embeddings/embedding_database_cliptrained_list.pkl", "rb") as f:
+        with open("../embeddings/clip_finetuned_python_list.pkl", "rb") as f:
             embedding_db = pickle.load(f)
     elif INDEX_TYPE == "faiss":
-        faiss_index = faiss.read_index("../embeddings/embedding_database_cliptrained_faiss.faiss")
-        with open("../embeddings/clip_embeddings_metadata.pkl", "rb") as f:
+        faiss_index = faiss.read_index("../embeddings/clip_finetuned_faiss.index")
+        with open("../embeddings/clip_finetuned_faiss_metadata.pkl", "rb") as f:
             metadata = pickle.load(f)
 
 elif MODEL_NAME == "CLIP base":
     if INDEX_TYPE == "naive":
-        with open("../embeddings/embedding_database_clipbase_list.pkl", "rb") as f:
+        with open("../embeddings/clip_python_list.pkl", "rb") as f:
             embedding_db = pickle.load(f)
     elif INDEX_TYPE == "faiss":
-        faiss_index = faiss.read_index("../embeddings/embedding_database_clipbase_faiss.faiss")
-        with open("../embeddings/clipbase_embeddings_metadata.pkl", "rb") as f:
+        faiss_index = faiss.read_index("../embeddings/clip_faiss.index")
+        with open("../embeddings/clip_faiss_metadata.pkl", "rb") as f:
             metadata = pickle.load(f)
 
 elif MODEL_NAME == "DINOv2":
     if INDEX_TYPE == "naive":
-        with open("../embeddings/embedding_database_dino_list.pkl", "rb") as f:
+        with open("../embeddings/dino_python_list.pkl", "rb") as f:
             embedding_db = pickle.load(f)
     elif INDEX_TYPE == "faiss":
-        faiss_index = faiss.read_index("../embeddings/embedding_database_dino_faiss.faiss")
-        with open("../embeddings/dino_embeddings_metadata.pkl", "rb") as f:
+        faiss_index = faiss.read_index("../embeddings/dino_faiss.index")
+        with open("../embeddings/dino_faiss_metadata.pkl", "rb") as f:
             metadata = pickle.load(f)
 else:
     raise ValueError("MODEL_NAME non valido!")
@@ -146,7 +146,7 @@ for ann, pred in zip(annotations_gt, predictions):
     print("-" * 50)
 
 # Visualizza prime 5 immagini con predizioni vs GT
-for img_path, gts in list(gt_by_image.items())[:5]:
+for img_path, gts in list(gt_by_image.items()):
     preds_for_img = [p for p in predictions if p["image_path"] == img_path]
     plot_gt_vs_pred(img_path, gts, preds_for_img)
 

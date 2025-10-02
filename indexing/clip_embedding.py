@@ -17,7 +17,7 @@ class ClipEmbedding:
     def create_embeddings(self, batch_size=8):
 
         if self.trained_model:
-            self.model.load_state_dict(torch.load("C:/Users/utente/PycharmProjects/ProgettoDeepLearning/models/trained_clip_model.pth", map_location="cpu"))
+            self.model.load_state_dict(torch.load("../models/trained_clip_model.pth", map_location="cpu"))
 
         if self.mode == "text":
             if isinstance(self.data, str):
