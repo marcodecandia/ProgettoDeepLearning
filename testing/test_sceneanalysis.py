@@ -1,3 +1,4 @@
+import os
 import pickle
 import faiss
 import seaborn as sns
@@ -15,17 +16,23 @@ from test_utils import load_annotations, iou, evaluate_predictions, plot_gt_vs_p
 import matplotlib
 matplotlib.use("TkAgg")
 
+
+
 # ======================
-# Setup
+# Setup dispositivo e detector volti
 # ======================
 device = "cuda" if torch.cuda.is_available() else "cpu"
 mask_maker = FaceMasks(device=device)
 
-# --- Configurazione modello ---
+# ======================
+# Configurazione modello e tipo indice
+# ======================
 MODEL_NAME = "CLIP fine-tuned"  # "CLIP base" | "CLIP fine-tuned" | "DINOv2"
 INDEX_TYPE = "faiss"            # "faiss" | "naive"
 
-# --- Caricamento embedding DB + FAISS ---
+# ======================
+# Caricamento embedding DB e FAISS
+# ======================
 embedding_db, faiss_index, metadata = None, None, None
 
 if MODEL_NAME == "CLIP fine-tuned":
@@ -58,7 +65,7 @@ else:
     raise ValueError("MODEL_NAME non valido!")
 
 # ======================
-# Load ground truth annotations (COCO JSON)
+# Caricamento ground truth COCO JSON
 # ======================
 annotations_gt = load_annotations(
     database_json_path="../data/complex_scenes/train/_annotations.coco.json",
@@ -66,7 +73,7 @@ annotations_gt = load_annotations(
     category_filter=["Naruto", "Gara", "Sakura", "Tsunade"]
 )
 
-# Conversione COCO box [x,y,w,h] -> [x1,y1,x2,y2]
+# Conversione bbox COCO [x,y,w,h] -> [x1,y1,x2,y2]
 def coco_to_xyxy(box):
     x, y, w, h = box
     return [x, y, x + w, y + h]
@@ -74,7 +81,7 @@ def coco_to_xyxy(box):
 for ann in annotations_gt:
     ann["bbox"] = coco_to_xyxy(ann["bbox"])
 
-# Organizza GT per immagine
+# Organizzazione GT per immagine
 gt_by_image = {}
 for ann in annotations_gt:
     gt_by_image.setdefault(ann["image_path"], []).append(ann)
@@ -93,7 +100,7 @@ for img_path, gts in tqdm(gt_by_image.items(), desc="Processing images"):
         continue
 
     for face in faces:
-        # --- Creazione embedding ---
+        # Creazione embedding per il volto
         if MODEL_NAME.startswith("CLIP"):
             clip = ClipEmbedding(
                 data=[{"image": face["image"]}],
@@ -109,7 +116,7 @@ for img_path, gts in tqdm(gt_by_image.items(), desc="Processing images"):
         else:
             raise ValueError(f"Modello {MODEL_NAME} non supportato")
 
-        # --- Ricerca top-K ---
+        # Ricerca top-K nell'indice
         searcher = SearchLogic(
             mask_embedding=embedding,
             embedding_db=embedding_db if INDEX_TYPE=="naive" else None,
@@ -135,20 +142,7 @@ for img_path, gts in tqdm(gt_by_image.items(), desc="Processing images"):
                 "label_pred": character_pred
             })
 
-# ======================
-# Debug: stampa alcuni esempi GT vs Pred
-# ======================
-print("\nEsempi di match GT vs Pred con IoU:\n")
-for ann, pred in zip(annotations_gt, predictions):
-    print("GT:", ann["label"], ann["bbox"])
-    print("Pred:", pred["label_pred"], pred["bbox"])
-    print("IoU:", iou(ann["bbox"], pred["bbox"]))
-    print("-" * 50)
 
-# Visualizza prime 5 immagini con predizioni vs GT
-for img_path, gts in list(gt_by_image.items()):
-    preds_for_img = [p for p in predictions if p["image_path"] == img_path]
-    plot_gt_vs_pred(img_path, gts, preds_for_img)
 
 # ======================
 # Etichette dei personaggi
@@ -156,7 +150,7 @@ for img_path, gts in list(gt_by_image.items()):
 labels = ["Gara", "Sakura", "Tsunade", "Unlabeled", "Naruto"]
 
 # ======================
-# Valutazione
+# Valutazione delle predizioni
 # ======================
 cm, report, accuracy = evaluate_predictions(
     annotations=annotations_gt,
@@ -165,10 +159,8 @@ cm, report, accuracy = evaluate_predictions(
     iou_threshold=0.2
 )
 
-
-
 # ======================
-# Plot Confusion Matrix
+# Plot della Confusion Matrix
 # ======================
 plt.figure(figsize=(8, 6))
 sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=labels, yticklabels=labels)
@@ -178,10 +170,11 @@ plt.title(f"Confusion Matrix - {MODEL_NAME} Character Recognition")
 plt.show()
 
 # ======================
-# Stampa risultati
+# Stampa risultati finali
 # ======================
 print("\nConfusion Matrix:\n", cm)
 print("\nClassification Report:\n", report)
 print(f"Accuracy: {accuracy*100:.2f}%")
+
 
 

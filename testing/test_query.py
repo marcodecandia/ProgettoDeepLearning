@@ -20,23 +20,23 @@ data_root = "../data/test"
 db_dir = "../embeddings"
 os.makedirs("./comparisons", exist_ok=True)
 
-# Carica immagini test
+# Caricamento immagini di test
 image_loader = ImageLoader(root=data_root)
 data_list = image_loader.loader()
 n_queries = len(data_list)
 
-# Per grafici comparativi
+# Dizionario per memorizzare tutte le metriche
 results_metrics = {metric: {} for metric in ["accuracy_top1", "accuracy_top5", "mrr", "cross_entropy", "query_time"]}
 
 # ---------------------------
-# Loop su configurazioni
+# Loop su modelli e tipi di indice
 # ---------------------------
 for model_name in MODELS:
     for index_type in INDEX_TYPES:
         config_name = f"{model_name}_{index_type}"
         print(f"\n=== Test {config_name} ===")
 
-        # Caricamento database
+        # Caricamento database di embedding
         embedding_db, faiss_index, metadata = None, None, None
         if index_type == "faiss":
             faiss_path = os.path.join(db_dir, f"{config_name}.index")
@@ -56,7 +56,7 @@ for model_name in MODELS:
             with open(db_path, "rb") as f:
                 embedding_db = pickle.load(f)
 
-        # Inizializza SearchLogic
+        # Inizializzazione logica di ricerca
         searcher = SearchLogic(
             mask_embedding=None,
             embedding_db=embedding_db,
@@ -65,31 +65,26 @@ for model_name in MODELS:
             embedding_type=model_name
         )
 
-        # Imposta embedding key per clip_finetuned
+        # Gestione embedding fine-tuned
         if model_name == "clip_finetuned":
             searcher.embedding_key = "clip_finetuned_embedding"
 
-        # ---------------------------
-        # Metriche
-        # ---------------------------
+        # Variabili per metriche
         correct_top1, correct_top5, mrr_list, cross_entropy_list, query_times = 0, 0, [], [], []
 
         # ---------------------------
-        # Loop query
+        # Loop sulle query
         # ---------------------------
         for i, item in enumerate(data_list):
             gt_label = item["label"]
             query_path = item["path"]
             query_img = Image.open(query_path).convert("RGB")
 
-            # ---- Creazione embedding query ----
+            # Creazione embedding query
             if model_name.startswith("clip"):
-                # CLIP
                 query_emb = searcher.encode_image(query_path)
             elif model_name.startswith("dino"):
-                # DINOv2
                 from indexing.dino_embedding import DinoEmbedding
-
                 dino_embedder = DinoEmbedding(data=query_img)
                 query_emb = dino_embedder.create_embeddings()
             else:
@@ -97,7 +92,7 @@ for model_name in MODELS:
 
             searcher.mask_embedding = query_emb
 
-            # ---- Ricerca ----
+            # Ricerca nell’indice
             start = time.time()
             if index_type == "python_list":
                 similarities = searcher.similarity()
@@ -117,7 +112,7 @@ for model_name in MODELS:
             if not top_preds:
                 continue
 
-            # ---- Metriche ----
+            # Calcolo metriche
             labels_pred = [pred[1] for pred in top_preds]
             correct_top1 += int(gt_label == labels_pred[0])
             correct_top5 += int(gt_label in labels_pred)
@@ -145,7 +140,7 @@ for model_name in MODELS:
         print(f"[{config_name}] Top-1: {accuracy_top1:.3f}, Top-5: {accuracy_top5:.3f}, "
               f"MRR: {mrr:.3f}, CE: {cross_entropy:.4f}, Tempo medio: {avg_query_time:.4f}s")
 
-        # Salvataggio metriche per grafici
+        # Salvataggio metriche nel dizionario
         results_metrics["accuracy_top1"][config_name] = accuracy_top1
         results_metrics["accuracy_top5"][config_name] = accuracy_top5
         results_metrics["mrr"][config_name] = mrr
@@ -153,20 +148,34 @@ for model_name in MODELS:
         results_metrics["query_time"][config_name] = avg_query_time
 
 # ---------------------------
-# Grafici comparativi
+# Creazione grafici comparativi
 # ---------------------------
+all_configs = list(results_metrics["accuracy_top1"].keys())
+cmap = plt.get_cmap("tab10")
+color_map = {cfg: cmap(i % 10) for i, cfg in enumerate(all_configs)}
+
 for metric, values in results_metrics.items():
     plt.figure(figsize=(8,5))
     names = list(values.keys())
     scores = list(values.values())
-    plt.bar(names, scores, color='skyblue')
+
+    colors = [color_map[name] for name in names]
+
+    plt.bar(names, scores, color=colors, edgecolor="black")
     plt.title(f"{metric} Comparison")
     plt.ylabel(metric)
     plt.xticks(rotation=45, ha='right')
+
+    # legenda con i colori delle configurazioni
+    handles = [plt.Rectangle((0,0),1,1, color=color_map[name]) for name in names]
+    plt.legend(handles, names, title="Configurazioni", bbox_to_anchor=(1.05, 1), loc="upper left")
+
     plt.tight_layout()
     plt.savefig(f"./comparisons/{metric}_comparison.png")
     plt.close()
 
 print("Testing completato. Grafici salvati in ./comparisons/.")
+
+
 
 

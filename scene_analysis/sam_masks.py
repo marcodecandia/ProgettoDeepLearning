@@ -1,15 +1,16 @@
 from typing import Optional
-
 import numpy as np
-
 import torch.cuda
 from PIL import Image
 from segment_anything import sam_model_registry, SamPredictor, SamAutomaticMaskGenerator
-
 from indexing.clip_embedding import ClipEmbedding
 
 
 def mask_to_box(mask, pad=4):
+    """
+    Calcola il bounding box (x0,y0,x1,y1) a partire da una maschera binaria.
+    pad: margine extra attorno al box.
+    """
     ys, xs = np.where(mask > 0)
     if len(xs) == 0 or len(ys) == 0:
         return 0, 0, 0, 0
@@ -21,16 +22,23 @@ def mask_to_box(mask, pad=4):
 
 
 class SAMMasks:
+    """
+    Classe che gestisce la segmentazione con SAM:
+    - Caricamento modello (predictor)
+    - Generazione maschere (auto o con prompt)
+    - Isolamento segmento in RGBA
+    - Creazione embedding CLIP per la maschera
+    """
     def __init__(self,
                  model_type: str = "vit_b",
                  checkpoint: str = "../models/sam_vit_b_01ec64.pth",
-                 device: Optional[str] = None
-                 ):
+                 device: Optional[str] = None):
         self.model_type = model_type
         self.checkpoint = checkpoint
-        self.device = torch.device("cpu") #forzato
+        self.device = torch.device("cpu")  # uso forzato su CPU
 
     def load_sam(self):
+        """ Carica il modello SAM e restituisce il predictor. """
         if self.device is None:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = torch.device(self.device)
@@ -40,7 +48,6 @@ class SAMMasks:
         predictor = SamPredictor(sam)
 
         print("Using SAM")
-
         return predictor
 
     def generate_masks(self,
@@ -51,6 +58,11 @@ class SAMMasks:
                        bbox,
                        params,
                        mode="auto"):
+        """
+        Genera maschere di segmentazione:
+        - mode="auto": usa SamAutomaticMaskGenerator
+        - mode="prompt": segmenta con punti/bounding box forniti
+        """
         rgb = image.convert("RGB")
         np_img = np.array(rgb)
 
@@ -63,33 +75,20 @@ class SAMMasks:
                 crop_n_points_downscale_factor=4,
                 min_mask_region_area=512
             )
-
             if params:
                 defaults.update(params)
 
             amg = SamAutomaticMaskGenerator(model=predictor.model, **defaults)
-
             masks = amg.generate(np_img)
-
-            masks = sorted(masks, key=lambda m: m.get("area", 0), reverse=True)
-
-            return masks
+            return sorted(masks, key=lambda m: m.get("area", 0), reverse=True)
 
         elif mode == "prompt":
             predictor.set_image(np_img)
-
-            _points = None
-            _labels = None
-            _box = None
+            _points, _labels, _box = None, None, None
 
             if points is not None:
                 _points = np.array(points, dtype=np.int32)
-
-                if point_labels is None:
-                    _labels = np.ones((len(points),), dtype=np.int32)
-                else:
-                    _labels = np.array(point_labels, dtype=np.int32)
-
+                _labels = np.ones((len(points),), dtype=np.int32) if point_labels is None else np.array(point_labels, dtype=np.int32)
             if bbox is not None:
                 _box = np.array(bbox, dtype=np.int32)
 
@@ -100,40 +99,31 @@ class SAMMasks:
                 multimask_output=True
             )
 
-            out = []
-            for m, s in zip(masks, scores):
-                out.append({
-                    "segmentation": m.astype(np.uint8),
+            out = [{"segmentation": m.astype(np.uint8),
                     "score": float(s),
-                    "area": int(m.sum())
-                })
+                    "area": int(m.sum())} for m, s in zip(masks, scores)]
 
-            out = sorted(out, key=lambda x: (x["score"], x["area"]), reverse=True)
-
-            return out
+            return sorted(out, key=lambda x: (x["score"], x["area"]), reverse=True)
 
         else:
             raise ValueError("mode deve essere 'auto' o 'prompt'")
 
-    def isolate_segment_rgba(self,
-                             image,
-                             mask,
-                             min_area=300,
-                             pad=6):
+    def isolate_segment_rgba(self, image, mask, min_area=300, pad=6):
+        """
+        Estrae e restituisce un segmento in RGBA a partire da una maschera.
+        Restituisce None se l’area è troppo piccola.
+        """
         area = int(mask.sum())
         if area < min_area:
             return None
 
-        x0, y0, x1, y1 = mask_to_box(mask=mask,
-                                     pad=pad)
+        x0, y0, x1, y1 = mask_to_box(mask=mask, pad=pad)
         if x1 <= x0 or y1 <= y0:
             return None
 
         crop_rgb = image.convert("RGB")
         mask_crop = mask[y0:y1, x0:x1] * 255
-        #crop_rgb = rgb.crop((x0, y0, x1, y1))
         crop_mask = Image.fromarray(mask_crop.astype(np.uint8), mode="L")
-
         crop_mask = crop_mask.resize(crop_rgb.size, resample=Image.NEAREST)
 
         crop_rgba = Image.new("RGBA", crop_rgb.size, (0, 0, 0, 0))
@@ -142,11 +132,11 @@ class SAMMasks:
         return crop_rgba
 
     def create_clip_embedding(self, mask):
-
+        """ Crea embedding CLIP a partire da una maschera. """
         clip = ClipEmbedding([{"image": mask}])
         mask_embedding_array = clip.create_embeddings(batch_size=1)
-
         return mask_embedding_array[0]
+
 
 
 
